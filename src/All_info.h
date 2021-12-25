@@ -10,13 +10,15 @@
 #define STATUS_CODE_OKE 200
 #define SSID_DEFAULT "SOICT_CORE_BOARD"
 
-#define KEY "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiI1YWU5MmZhNC01NGI4LTRkNDMtODE5My1jYjg3YTBiNzg0ZmMiLCJpYXQiOjE2MTEzMjMxNjN9.6dxfiCKoUv2oJE2u5NkU_9cLYpdK3d_nqp7p-ADN-bs"
+// http://siot.soict.ai/devices/hb20211223
+#define KEY "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJfaWQiOiJmZjFkNGZlNC03ZGUyLTQ3YzEtOWEyMy1iNzVmYTA4NzMzMjkiLCJpYXQiOjE2Mzc4MTY4MjF9.pbcrIf_fwWGKzV46ksfK2mEjt2n7BOTXG22otT5r8Eo"
 #define CONTENT_TYPE "application/json"
-#define Platform "key123"
+#define Platform "Rev4"
 
-#define URL_TEMP "http://siot.techlinkvn.com/api/devices/test-v6s6s/attributes/temperature-jdhvl"
-#define URL_CHECK "http://siot.techlinkvn.com/api/platforms/test-v6s6s/verify"
-#define URL_DOWN  "http://siot.techlinkvn.com/api/platforms/test-v6s6s/download"
+#define URL_LUMINATION "http://siot.soict.ai/api/devices/hb20211223/attributes/lumination-kfij8"
+#define URL_TURNONTIME "http://siot.soict.ai/api/devices/hb20211223/attributes/turnontime-qmri2"
+#define URL_EATING  "http://siot.soict.ai/api/devices/hb20211223/attributes/eating-j8ov5"
+#define URL_DISTANCE  "http://siot.soict.ai/api/devices/hb20211223/attributes/distance-pz1q8"
 
 #define MAX_WIDTH 128
 #define MAX_HIGHT 64

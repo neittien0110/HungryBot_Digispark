@@ -9,6 +9,8 @@
 //    4. Click Tools / select Board Manager... Search and install ESP8266 with version 2.7.4 (must not 3.x.x)
 //    5. Click Tools / select Board:. Choice board "ESP8266" or NodeMCU 0.9 (ESP-12 Module) or NodeMCU 1.0 (ESP-12E Module)
 //-------------------------------------------------------------------------------
+#include "src/SiotCore.h"
+SiotCore core;
 
 //----------------------------------------------------------------------------------
 // CÀI ĐẶT TRÌNH BIÊN DỊCH CHO DEV KIT
@@ -114,6 +116,8 @@ void setup() {
     Serial.println("Distance, Lumen");
 #endif     
   }
+  // Khởi tạo kết nối với máy chủ SIOT Sphere
+  core.init();
 
   ServoHand.attach(PIN_SERVOHAND);
   ServoMove(FREE_ANGLE);
