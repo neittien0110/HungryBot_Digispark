@@ -9,6 +9,8 @@
 //    4. Click Tools / select Board Manager... Search and install ESP8266 with version 2.7.4 (must not 3.x.x)
 //    5. Click Tools / select Board:. Choice board "ESP8266" or NodeMCU 0.9 (ESP-12 Module) or NodeMCU 1.0 (ESP-12E Module)
 //-------------------------------------------------------------------------------
+#include "src/SiotCore.h"
+SiotCore core;
 
 //----------------------------------------------------------------------------------
 // CÀI ĐẶT TRÌNH BIÊN DỊCH CHO DEV KIT
@@ -62,6 +64,17 @@
 
 unsigned int idle_count; // đếm số lần tĩnh lặng để tiết kiệm năng lượng
 
+//Biến chứa khoảng cách. Xem hàm GetDistance
+unsigned int distance;
+unsigned int pre_distance;
+
+//Biến chứa mức sáng. Xem hàm GetLumen
+unsigned int lumen;
+unsigned int pre_lumen;
+
+//Biến chứa kết quả ack từ SIOT server sau khi upload data
+String response;
+
 bool KeyboardMode;    // Chế độ bàn phím hay không
 /*
    Server di chuyen 1 goc nhat dinh
@@ -114,7 +127,13 @@ void setup() {
     Serial.println("Distance, Lumen");
 #endif     
   }
+  // Khởi tạo kết nối với máy chủ SIOT Sphere
+  core.init();
 
+  //Update fireware từ xa. Chưa áp dụng.
+  //core.updateFireware("1.0")
+  
+  // Khởi tạo servo cánh tay đổ rác
   ServoHand.attach(PIN_SERVOHAND);
   ServoMove(FREE_ANGLE);
 
@@ -127,6 +146,8 @@ void setup() {
   // Thiết lập chân ADC A0 duy nhất cho các cảm biến analog: ánh sáng
   pinMode(PIN_LIGHT_SENSOR, INPUT);
 
+  //
+  core.updateData(URL_TURNONTIME, String(distance), response, POST); // Đẩy thời điểm khởi động lên hệ thống
   idle_count = 0;
 }
 
@@ -141,21 +162,21 @@ int GetDistance()
   unsigned int  distance = pulseIn(ECHOPIN, HIGH); // Doc thoi gian tra ve. Hay dung kieu unsign. Da ghi nhan co so am tra ve roi
   return distance / 58;                         // Tinh toan khoang cach
 }
-unsigned int dis;
 
 // Lấy mức độ ánh sáng
 int GetLumen()
 {
   return analogRead(PIN_LIGHT_SENSOR);
 }
-unsigned int lumen;
-
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------------
 // the loop routine runs over and over again forever:
 //-----------------------------------------------------------------------------------------------------------------------------------------------------
 void loop() {
-  dis = GetDistance();
+  pre_distance = distance;
+  distance = GetDistance();
+
+  pre_lumen = lumen;
   lumen = GetLumen();
 
   // Gửi về bàn phím nếu ơ chế độ phù hợp
@@ -166,24 +187,25 @@ void loop() {
     DigiKeyboard.delay(200);
 #endif
 #ifdef SERIAL_COMMUNICATION       //Gửi ở dạng serial
-    Serial.print(dis);
+    Serial.print(distance);
     Serial.print(", ");
     Serial.print(lumen);
     Serial.println();
 #endif
   }
 
-
+  // Nếu đợi lâu không đổ rác thì sẽ giảm thời gian đợi, giúp tiết kiệm năng lượng
   if (idle_count < 2000) {
     delay(100);
   } else {
     delay(1000);
   }
-  if (dis < COVER_THREADHOLD) {
-    idle_count = 0;
+  if (distance < COVER_THREADHOLD) {
     digitalWrite(PIN_LED, HIGH);
     delay(2000);
     ServoMove(THROUGH_ANGLE);
+    core.updateData(URL_EATING, String(idle_count), response, POST); // Đẩy thời điểm đổ rác lên hệ thống
+    idle_count = 0;
     delay(500);
     ServoMove(FREE_ANGLE);
     digitalWrite(PIN_LED, LOW);
@@ -192,6 +214,17 @@ void loop() {
     //Giai phap: them do tre
     delay(1000);
   } else {
+    // Đêm tăng số lần không có rác
     idle_count++;
   }
+
+  //Gửi dữ liệu về server SIOT nếu có thay đổi
+  if (pre_distance != distance) {
+    core.updateData(URL_DISTANCE, String(distance), response, POST); // Đẩy dữ liệu khoảng cách lên hệ thống
+  }
+  if (pre_lumen != lumen) {
+    core.updateData(URL_LUMINATION, String(distance), response, POST); // Đẩy dữ liệu đô sáng lên hệ thống
+  }
+
+  
 }
