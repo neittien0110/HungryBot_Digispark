@@ -9,8 +9,6 @@
 //    4. Click Tools / select Board Manager... Search and install ESP8266 with version 2.7.4 (must not 3.x.x)
 //    5. Click Tools / select Board:. Choice board "ESP8266" or NodeMCU 0.9 (ESP-12 Module) or NodeMCU 1.0 (ESP-12E Module)
 //-------------------------------------------------------------------------------
-#include "src/SiotCore.h"
-SiotCore core;
 
 //----------------------------------------------------------------------------------
 // CÀI ĐẶT TRÌNH BIÊN DỊCH CHO DEV KIT
@@ -50,6 +48,7 @@ SiotCore core;
   #define PIN_LED           D7  
   #define PIN_LIGHT_SENSOR  A0
   #define SERIAL_COMMUNICATION   // Giao tiếp thiết bị-máy tính dạng console: Serial 9600
+  #define SIOT_DATA              // Có gửi dữ liệu về server
   #include <Servo.h>
   Servo ServoHand;
 #endif  
@@ -61,6 +60,12 @@ SiotCore core;
 #define THROUGH_ANGLE      0
 #define DISTANCE 60         // Distance value
 #define COVER_THREADHOLD 8
+
+#ifdef SIOT_DATA
+  #include "src/SiotCore.h"
+  SiotCore core;
+#endif
+
 
 unsigned int idle_count; // đếm số lần tĩnh lặng để tiết kiệm năng lượng
 
@@ -127,8 +132,11 @@ void setup() {
     Serial.println("Distance, Lumen");
 #endif     
   }
+
+#ifdef SIOT_DATA  
   // Khởi tạo kết nối với máy chủ SIOT Sphere
   core.init();
+#endif
 
   //Update fireware từ xa. Chưa áp dụng.
   //core.updateFireware("1.0")
@@ -146,8 +154,6 @@ void setup() {
   // Thiết lập chân ADC A0 duy nhất cho các cảm biến analog: ánh sáng
   pinMode(PIN_LIGHT_SENSOR, INPUT);
 
-  //
-  core.updateData(URL_TURNONTIME, String(distance), response, POST); // Đẩy thời điểm khởi động lên hệ thống
   idle_count = 0;
 }
 
@@ -196,7 +202,9 @@ void loop() {
 
   // Nếu đợi lâu không đổ rác thì sẽ giảm thời gian đợi, giúp tiết kiệm năng lượng
   if (idle_count < 2000) {
-    delay(100);
+#ifndef SIOT_DATA        
+    delay(100);     // Nếu gửi dữ liệu về server thì độ trễ đó là đủ rồi, không cần phải delay thêm nữa
+#endif    
   } else {
     delay(1000);
   }
@@ -204,11 +212,16 @@ void loop() {
     digitalWrite(PIN_LED, HIGH);
     delay(2000);
     ServoMove(THROUGH_ANGLE);
-    core.updateData(URL_EATING, String(idle_count), response, POST); // Đẩy thời điểm đổ rác lên hệ thống
     idle_count = 0;
     delay(500);
     ServoMove(FREE_ANGLE);
     digitalWrite(PIN_LED, LOW);
+    
+#ifdef SIOT_DATA      
+    core.updateData(URL_EATING, String(idle_count), response, POST); // Đẩy thời điểm đổ rác lên hệ thống
+    core.updateData(URL_DISTANCE, String(distance), response, POST); // Đẩy dữ liệu khoảng cách lên hệ thống
+#endif    
+
     //Fix-bug: Neu su dung nguon Adpater (khong su dung dung data usb cable) thi khoang cach do duoc tu lan thu 2 tro luon < nguong, lam cho BOT lien tuc do rac.
     //Nghi ngo nguyen nhan: do khong gui thong tin qua DigiKeyboard, viec lay do khoang cach dien ra nhanh qua, khi ma dong co servo chua ve dung vi tri,
     //Giai phap: them do tre
@@ -219,12 +232,12 @@ void loop() {
   }
 
   //Gửi dữ liệu về server SIOT nếu có thay đổi
+#ifdef SIOT_DATA    
   if (pre_distance != distance) {
     core.updateData(URL_DISTANCE, String(distance), response, POST); // Đẩy dữ liệu khoảng cách lên hệ thống
   }
   if (pre_lumen != lumen) {
     core.updateData(URL_LUMINATION, String(distance), response, POST); // Đẩy dữ liệu đô sáng lên hệ thống
   }
-
-  
+#endif
 }
