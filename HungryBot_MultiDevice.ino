@@ -33,10 +33,11 @@
 //------------------------------------------------------------------------------------------
 #ifdef DIGISPARK_KICKSTARTER_PRO
   #define ECHOPIN         0
-  #define TRIGPIN         1
+  #define TRIGPIN         1t
   #define PIN_SERVOHAND   2  
   #define PIN_LED         1       // Đo khoảng cách và đèn hiệu sẽ chắc chắn không sử dụng cùng lúc. Hiện tượng đèn nháy báo hiệu quá trình đo khoảng cách đang thực hiện
   #define KEYBOARD_WEDGE          // Giao tiếp thiết bị-máy tính dạng console: Bàn phím ảo chỉ có tác dụng với các board có USB trực tiếp (không qua CH340..) như là DigiSpark Pro, Digispark Kickstarter Pro, Arduino Due, Ardruino Zero 
+  #define IDLE_THREADHOLD 2000   // Đếm số lần lặp tốc độ cao để bắt đầu chuyển sang chế độ lặp tốc độ chậm nhằm giảm tiêu thụ điện.
   #include <SoftRcPulseOut.h>
   #include "DigiKeyboard.h"
   SoftRcPulseOut ServoHand;  
@@ -48,22 +49,24 @@
   #define PIN_LED           D7  
   #define PIN_LIGHT_SENSOR  A0
   #define SERIAL_COMMUNICATION   // Giao tiếp thiết bị-máy tính dạng console: Serial 9600
+  #define IDLE_THREADHOLD 50000 // Đếm số lần lặp tốc độ cao để bắt đầu chuyển sang chế độ lặp tốc độ chậm nhằm giảm tiêu thụ điện.
   #define SIOT_DATA              // Có gửi dữ liệu về server
+  #define POST_THREADHOLD  100   // Chu kì truyền dữ liệu distance, lumen về server. Tầm 30 giây = 100
   #include <Servo.h>
   Servo ServoHand;
 #endif  
 
 
 #define NOW             1         
-#define REFRESH_PERIOD_MS 20      
-#define FREE_ANGLE      100
+#define FREE_ANGLE      100  
 #define THROUGH_ANGLE      0
 #define DISTANCE 60         // Distance value
-#define COVER_THREADHOLD 8
-
+#define DISTANCE_LOW_THREADHOLD 8
+#define REFRESH_PERIOD_MS 20    // Khoảng trễ để đợi servo hoàn thành góc quay
 #ifdef SIOT_DATA
   #include "src/SiotCore.h"
   SiotCore core;
+  unsigned int post_ignore; // đếm số lần giãn cách, giảm số lượng lần đẩy dữ liệu lên server
 #endif
 
 
@@ -88,7 +91,7 @@ bool KeyboardMode;    // Chế độ bàn phím hay không
 */
 void ServoMove(int pos )
 {
-  int stall = 14;
+  int stall=14;
   for (; stall > 0; stall--)  {
     ServoHand.write(pos);              // tell servo to go to position in variable 'pos'
     delay(REFRESH_PERIOD_MS);        // waits 20ms for refresh period
@@ -98,7 +101,9 @@ void ServoMove(int pos )
   }
 }
 
+//-----------------------------------------------------------------------------------------------------------------------
 // the setup routine runs once when you press reset:
+//-----------------------------------------------------------------------------------------------------------------------
 void setup() {
   // initialize the digital pin as an output
   pinMode(PIN_LED, OUTPUT); //LED on Model A  or Pro
@@ -118,7 +123,9 @@ void setup() {
   pinMode(ECHOPIN, INPUT);
   pinMode(TRIGPIN, OUTPUT);
 
-  if (GetDistance() < COVER_THREADHOLD) {
+
+  distance=GetDistance();
+  if (distance < DISTANCE_LOW_THREADHOLD) {
     // Kích hoạt chế độ bàn phím. Áp dụng khi nối với máy tính
     // Nếu sử dụng dây nguồn từ adapter mà không có máy tính, thiết bị sẽ bị treo đấy.
     KeyboardMode = true;
@@ -133,28 +140,36 @@ void setup() {
 #endif     
   }
 
+  // Khởi tạo servo cánh tay đổ rác
+  ServoHand.attach(PIN_SERVOHAND);
+  ServoMove(FREE_ANGLE);
+  
+  //ServoHand.detach();   //Không dược detach quá sớm vì có thể servo chưa chuyển động xong
+
+
 #ifdef SIOT_DATA  
   // Khởi tạo kết nối với máy chủ SIOT Sphere
   core.init();
+  core.updateData(URL_TURNONTIME, String(distance), response, POST); // Đẩy thời điểm được bật lên server
 #endif
 
   //Update fireware từ xa. Chưa áp dụng.
   //core.updateFireware("1.0")
-  
-  // Khởi tạo servo cánh tay đổ rác
-  ServoHand.attach(PIN_SERVOHAND);
-  ServoMove(FREE_ANGLE);
+    
+  ServoHand.detach();
 
   // Báo hiệu đã chỉnh servo
   digitalWrite(PIN_LED, HIGH);
   delay(200);
   digitalWrite(PIN_LED, LOW);
 
-
+#ifdef ARDUINO_NODEMCU_12     
   // Thiết lập chân ADC A0 duy nhất cho các cảm biến analog: ánh sáng
   pinMode(PIN_LIGHT_SENSOR, INPUT);
+#endif
 
   idle_count = 0;
+  post_ignore = 0;
 }
 
 // Lấy khoảng cách từ cảm biến SR-04
@@ -169,11 +184,13 @@ int GetDistance()
   return distance / 58;                         // Tinh toan khoang cach
 }
 
+#ifdef ARDUINO_NODEMCU_12     
 // Lấy mức độ ánh sáng
 int GetLumen()
 {
   return analogRead(PIN_LIGHT_SENSOR);
 }
+#endif
 
 //-----------------------------------------------------------------------------------------------------------------------------------------------------
 // the loop routine runs over and over again forever:
@@ -182,14 +199,16 @@ void loop() {
   pre_distance = distance;
   distance = GetDistance();
 
+#ifdef ARDUINO_NODEMCU_12     
   pre_lumen = lumen;
   lumen = GetLumen();
+#endif  
 
   // Gửi về bàn phím nếu ơ chế độ phù hợp
   if (KeyboardMode) {
 #ifdef DIGISPARK_KICKSTARTER_PRO)   //Chức năng bàn phím ảo 
     DigiKeyboard.sendKeyStroke(0);
-    DigiKeyboard.println(dis);
+    DigiKeyboard.println(distance);
     DigiKeyboard.delay(200);
 #endif
 #ifdef SERIAL_COMMUNICATION       //Gửi ở dạng serial
@@ -201,31 +220,40 @@ void loop() {
   }
 
   // Nếu đợi lâu không đổ rác thì sẽ giảm thời gian đợi, giúp tiết kiệm năng lượng
-  if (idle_count < 2000) {
-#ifndef SIOT_DATA        
+  if (idle_count < IDLE_THREADHOLD) {
     delay(100);     // Nếu gửi dữ liệu về server thì độ trễ đó là đủ rồi, không cần phải delay thêm nữa
-#endif    
   } else {
     delay(1000);
   }
-  if (distance < COVER_THREADHOLD) {
+  if (distance < DISTANCE_LOW_THREADHOLD) {
+    // Bật đèn báo
     digitalWrite(PIN_LED, HIGH);
     delay(2000);
+
+    // Attach và Detach ngay sau khi sử dụng để tiết kiệm năng lượng
+    ServoHand.attach(PIN_SERVOHAND);
+  
     ServoMove(THROUGH_ANGLE);
-    idle_count = 0;
     delay(500);
     ServoMove(FREE_ANGLE);
+
+    // Tắt đèn báo
     digitalWrite(PIN_LED, LOW);
-    
+        
 #ifdef SIOT_DATA      
     core.updateData(URL_EATING, String(idle_count), response, POST); // Đẩy thời điểm đổ rác lên hệ thống
     core.updateData(URL_DISTANCE, String(distance), response, POST); // Đẩy dữ liệu khoảng cách lên hệ thống
 #endif    
-
+   
     //Fix-bug: Neu su dung nguon Adpater (khong su dung dung data usb cable) thi khoang cach do duoc tu lan thu 2 tro luon < nguong, lam cho BOT lien tuc do rac.
     //Nghi ngo nguyen nhan: do khong gui thong tin qua DigiKeyboard, viec lay do khoang cach dien ra nhanh qua, khi ma dong co servo chua ve dung vi tri,
     //Giai phap: them do tre
     delay(1000);
+
+    // Attach và Detach ngay sau khi sử dụng để tiết kiệm năng lượng
+    ServoHand.detach( );    
+    
+    idle_count = 0;    
   } else {
     // Đêm tăng số lần không có rác
     idle_count++;
@@ -233,11 +261,15 @@ void loop() {
 
   //Gửi dữ liệu về server SIOT nếu có thay đổi
 #ifdef SIOT_DATA    
-  if (pre_distance != distance) {
-    core.updateData(URL_DISTANCE, String(distance), response, POST); // Đẩy dữ liệu khoảng cách lên hệ thống
-  }
-  if (pre_lumen != lumen) {
-    core.updateData(URL_LUMINATION, String(distance), response, POST); // Đẩy dữ liệu đô sáng lên hệ thống
+  post_ignore++;
+  if (post_ignore > POST_THREADHOLD){
+    if (pre_distance != distance) {
+      core.updateData(URL_DISTANCE, String(distance), response, POST); // Đẩy dữ liệu khoảng cách lên hệ thống
+    }
+    if (pre_lumen != lumen) {
+      core.updateData(URL_LUMINATION, String(lumen), response, POST); // Đẩy dữ liệu đô sáng lên hệ thống
+    }
+    post_ignore = 0;
   }
 #endif
 }
