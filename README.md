@@ -33,3 +33,7 @@
 ## Source code
 
 - [GitHub](https://github.com/neittien0110/HungryBot_MultiDevices)
+
+## Artifical Intelligence Processing
+
+  [Collect data from Data Center](./AI_bot.py)
